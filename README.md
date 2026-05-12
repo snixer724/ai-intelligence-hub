@@ -6,6 +6,15 @@ Current work in progress, very new. Please see the design I put together for it 
 ### Design
 ![ai-intelligence-hub design](readme_images/ai-intelligence-hub-design.png)
 
+### Running Current Version
+```
+cd api
+npm install
+npm run build
+curl -X POST http://localhost:3000/analyze -H "Content-Type: application/json" -d '{}'
+```
+
+This should spin up the endpoint and allow you to hit it from your local machine.
 
 ### Docker
 ```
