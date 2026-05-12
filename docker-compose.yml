@@ -12,6 +12,3 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-
-  # We will add the node-api and python-worker services here later 
-  # once we have their Dockerfiles ready.
