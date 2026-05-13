@@ -12,3 +12,15 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      - redis
+
