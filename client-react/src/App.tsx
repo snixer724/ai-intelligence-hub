@@ -1,82 +1,93 @@
-import { useState } from 'react'
-import { Container, Typography, Box, TextField, Button } from '@mui/material'
+import { useState, useEffect, type FormEvent } from 'react'
+import { Container, Typography } from '@mui/material'
+import AnalyzeForm from './components/AnalyzeForm'
+import QueueStatus from './components/QueueStatus'
+import type { QueueCounts, QueueJobs } from './types/queue'
 
 function App() {
-    const [url, setUrl] = useState('')
-    const [loading, setLoading] = useState(false)
-    const [message, setMessage] = useState('')
+  const [url, setUrl] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
+  const [queueCounts, setQueueCounts] = useState<QueueCounts>({ active: 0, waiting: 0, total: 0 })
+  const [queueJobs, setQueueJobs] = useState<QueueJobs>({ active: [], waiting: [], processedCount: 0 })
 
-    const handleSubmit = async (e: React.SubmitEvent) => {
-        e.preventDefault() // prevents browser from reloading on form submission
-        if (!url.trim()) return // basic check to prevent empty submissions
-
-        setLoading(true)
-        setMessage('')
-
-        try {
-            const response = await fetch('/api/analyze', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ url }),
-            })
-
-            const data = await response.json()
-
-            if (response.ok) {
-                setMessage(data.message || 'Analysis queued successfully!')
-                setUrl('')
-            } else {
-                setMessage(data.message || 'Failed to queue analysis.')
-            }
-        } catch (error) {
-            setMessage('Error: Could not connect to server.')
-        } finally {
-            setLoading(false)
-        }
+  const fetchQueueData = async () => {
+    try {
+      const res = await fetch('/api/queue/status')
+      const data = await res.json()
+      setQueueCounts(data.counts)
+      setQueueJobs(data.jobs)
+    } catch (error) {
+      console.error('Failed to fetch queue data', error)
     }
+  }
 
-    return (
-        <Container maxWidth="sm" sx={{ py: 6 }}>
-            <Typography variant="h3" component="h1" gutterBottom>
-                AI Intelligence Hub
-            </Typography>
-            <Typography variant="body1" gutterBottom>
-                Enter a URL to analyze its content and extract insights using our AI-powered tools.
-            </Typography>
+  useEffect(() => {
+    fetchQueueData()
+  }, [])
 
-            <Box
-                component="form"
-                onSubmit={handleSubmit}
-                sx={{ '& > :not(style)': { m: 1, width: '25ch' } }}
-                noValidate
-                autoComplete="off"
-            >
-                <TextField
-                    id="url-input"
-                    label="Enter URL"
-                    variant="standard"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    required
-                />
-                <Button
-                    type="submit"
-                    variant="contained"
-                    disabled={loading || !url.trim()}
-                >
-                    {loading ? 'Submitting...' : 'Analyze'}
-                </Button>
-            </Box>
+  const handleDelete = async (id: string) => {
+    try {
+      await fetch(`/api/queue/jobs/${id}`, { method: 'DELETE' })
+      fetchQueueData()
+    } catch (error) {
+      console.error('Failed to delete job', error)
+    }
+  }
 
-            {message && (
-                <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
-                    {message}
-                </Typography>
-            )}
-        </Container>
-    )
+  const handleReset = async () => {
+    if (window.confirm('Are you sure you want to reset the entire queue? This will delete all jobs.')) {
+      try {
+        await fetch('/api/queue/reset', { method: 'DELETE' })
+        fetchQueueData()
+      } catch (error) {
+        console.error('Failed to reset queue', error)
+      }
+    }
+  }
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!url.trim()) return
+
+    setLoading(true)
+    setMessage('')
+
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setMessage(data.message || 'Analysis queued successfully!')
+        setUrl('')
+        fetchQueueData()
+      } else {
+        setMessage(data.message || 'Failed to queue analysis.')
+      }
+    } catch (error) {
+      setMessage('Error: Could not connect to server.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Container maxWidth="sm" sx={{ py: 6 }}>
+      <Typography variant="h3" component="h1" gutterBottom>
+        AI Intelligence Hub
+      </Typography>
+
+      <AnalyzeForm url={url} setUrl={setUrl} loading={loading} onSubmit={handleSubmit} message={message}/>
+      <QueueStatus counts={queueCounts} jobs={queueJobs} onDelete={handleDelete} onReset={handleReset} />
+    </Container>
+  )
 }
 
 export default App

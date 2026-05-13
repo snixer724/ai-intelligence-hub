@@ -5,6 +5,15 @@ import { analysisQueue } from '../queue.js';
 const router = Router();
 // const prisma = new PrismaClient();
 
+/**
+ * Endpoint to receive URL analysis requests. It validates the input and adds a new job to the analysis queue. 
+ * The job will be processed asynchronously by a worker, allowing the API to respond quickly without waiting for the analysis to complete.
+ * @route POST /api/analyze
+ * @param {string} req.body.url - The URL to be analyzed, provided in the request body as JSON.
+ * @returns {object} 202 - Analysis queued successfully
+ * @returns {object} 400 - Bad request (missing or invalid URL)
+ * @returns {object} 500 - Internal server error
+ */
 router.post('/', async (req: Request, res: Response) => {
     const { url } = req.body;
 
