@@ -6,15 +6,24 @@ Current work in progress, very new. Please see the design I put together for it 
 ### Design
 ![ai-intelligence-hub design](readme_images/ai-intelligence-hub-design.png)
 
-### Running Current Version
+### Running Current Backend
 ```
 cd api
 npm install
-npm run build
-curl -X POST http://localhost:3000/analyze -H "Content-Type: application/json" -d '{}'
+npm run dev
+curl -X POST http://localhost:3000/analyze -H "Content-Type: application/json" -d '{"url": "website url"}'
 ```
 
 This should spin up the endpoint and allow you to hit it from your local machine.
+
+### Running Current Frontend
+```
+cd client-react
+npm install
+npm run dev
+http://localhost:5173
+```
+This should allow you to navigate in your browser to the frontend.
 
 ### Docker
 ```
