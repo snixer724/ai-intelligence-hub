@@ -6,8 +6,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy worker code
-COPY worker.py .
+# Copy all worker source files
+COPY . .
 
 # Run the worker
 CMD ["python", "worker.py"]

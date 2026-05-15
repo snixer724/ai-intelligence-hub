@@ -31,7 +31,12 @@ docker-compose down -v
 docker-compose up -d
 ```
 
-### Postgres
+### Redis Debugging
+```
+docker-compose exec redis redis-cli
+```
+
+### Postgres Debugging
 Connect to the DB
 ```
 psql -U user -d intelligence_db

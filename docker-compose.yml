@@ -20,7 +20,8 @@ services:
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      PYTHONUNBUFFERED: 1
+      DATABASE_URL: postgresql://user:password@postgres:5432/intelligence_db
     depends_on:
       - redis
+      - postgres
 
