@@ -1,9 +1,10 @@
 import json
 import time
+import traceback
 import uuid
 from typing import Any
 
-from db import AnalysisJob, save_record
+from db import AnalysisJob, save_record, session_scope
 from redis_client import redis_client
 from job_status import JobStatus
 
@@ -33,7 +34,7 @@ def create_analysis_job(url: str) -> AnalysisJob:
     return AnalysisJob(
         id=str(uuid.uuid4()),
         url=url,
-        status=JobStatus.processing.name,
+        status=JobStatus.PROCESSING.name,
     )
 
 
@@ -42,8 +43,12 @@ def mark_job_complete(job_id: str, job_record: AnalysisJob) -> None:
         completed_key = f'{QUEUE_KEY}:completed'
         redis_client.zadd(completed_key, {job_id: time.time()})
 
-        job_record.status = JobStatus.completed.name
-        save_record(job_record)
+        with session_scope() as session:
+            merged = session.merge(job_record)
+            merged.status = JobStatus.COMPLETED.name
+            session.flush()
+            session.refresh(merged)
+
         print(f'Job {job_id} marked as complete', flush=True)
     except Exception as e:
         print(f'Error marking job complete: {e}', flush=True)
@@ -56,8 +61,12 @@ def mark_job_failed(job_id: str, job_record: AnalysisJob, error: str) -> None:
         job_key = f'{QUEUE_KEY}:{job_id}'
         redis_client.hset(job_key, mapping={'state': 'failed', 'error': error})
 
-        job_record.status = JobStatus.failed.name
-        save_record(job_record)
+        with session_scope() as session:
+            merged = session.merge(job_record)
+            merged.status = JobStatus.FAILED.name
+            session.flush()
+            session.refresh(merged)
+
         print(f'Job {job_id} marked as failed: {error}', flush=True)
     except Exception as e:
         print(f'Error marking job as failed: {e}', flush=True)
@@ -72,8 +81,9 @@ def process_job(job_id: str, job_data: dict[str, Any]) -> tuple[bool, AnalysisJo
 
     print(f'[WORKER] Analyzing {url}...', flush=True)
     job_record = create_analysis_job(url)
+    job_id = job_record.id  # Save before session closes
     job_record = save_record(job_record)
-    print(f'[WORKER] Saved AnalysisJob {job_record.id} to DB', flush=True)
+    print(f'[WORKER] Saved AnalysisJob {job_id} to DB', flush=True)
 
     # TODO: Implement AI analysis logic here
     time.sleep(2)
@@ -103,7 +113,7 @@ def main() -> None:
             print('\n[WORKER] Stopping worker...', flush=True)
             break
         except Exception as e:
-            print(f'Unexpected error: {e}', flush=True)
+            print(f'[WORKER] Unexpected error:\n{traceback.format_exc()}', flush=True)
 
 
 if __name__ == '__main__':
