@@ -1,4 +1,7 @@
-FROM python:3.11-slim
+FROM mcr.microsoft.com/playwright/python:v1.59.0-noble
+
+# Force Python to flush logs to the terminal immediately
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 

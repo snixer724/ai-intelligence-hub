@@ -18,6 +18,7 @@ export default function QueueStatus({ counts, jobs, onDelete, onReset }: QueueSt
         </Typography>
         <Typography>Active: {counts.active}</Typography>
         <Typography>Waiting: {counts.waiting}</Typography>
+        <Typography>Failed: {counts.failed}</Typography>
         <Typography>Total: {counts.total}</Typography>
         <Typography>Processed: {jobs.processedCount}</Typography>
         <Button variant="outlined" color="secondary" onClick={onReset} sx={{ mt: 1 }}>

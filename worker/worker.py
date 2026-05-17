@@ -2,6 +2,8 @@ import json
 import time
 import traceback
 import uuid
+from scraper import get_url_title
+
 from typing import Any
 
 from db import AnalysisJob, save_record, session_scope
@@ -85,8 +87,21 @@ def process_job(job_id: str, job_data: dict[str, Any]) -> tuple[bool, AnalysisJo
     job_record = save_record(job_record)
     print(f'[WORKER] Saved AnalysisJob {job_id} to DB', flush=True)
 
-    # TODO: Implement AI analysis logic here
-    time.sleep(2)
+    # --- CALL THE EXTERNAL SCRAPER FILE ---
+    try:
+        # Call the synchronous wrapper from scraper.py
+        print(f'[WORKER] Calling scraper for {url}', flush=True)
+        page_title = get_url_title(url)
+        
+        if page_title:
+            print(f'[WORKER] Playwright check passed for Job {job_id}', flush=True)
+            # job_record.title = page_title
+            # save_record(job_record)
+        else:
+            print(f'[WORKER] Playwright check failed or returned empty for Job {job_id}', flush=True)
+            
+    except Exception as e:
+        print(f'[WORKER ERROR] Failed during scraper execution: {e}', flush=True)
 
     print(f'[WORKER] Job {job_id} completed successfully', flush=True)
     return True, job_record

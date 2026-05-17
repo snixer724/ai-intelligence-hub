@@ -7,6 +7,7 @@ export type Job = {
 export type QueueCounts = {
   active: number
   waiting: number
+  failed: number
   total: number
 }
 

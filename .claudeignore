@@ -1,0 +1,5 @@
+# Ignores node_modules in the root, in client-react, or anywhere else
+**/node_modules/
+node_modules/
+
+**/package-lock.json

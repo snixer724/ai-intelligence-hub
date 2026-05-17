@@ -34,8 +34,8 @@ router.get('/status', async (req: Request, res: Response) => {
             createdAt: job.opts.timestamp
         }));
 
-        res.json({ 
-            counts: { active: activeCount, waiting: waitingCount, total },
+        res.json({
+            counts: { active: activeCount, waiting: waitingCount, failed: failedCount, total },
             jobs: { active, waiting, processedCount }
         });
     } catch (error) {
