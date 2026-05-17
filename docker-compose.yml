@@ -31,9 +31,23 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       DATABASE_URL: postgresql://user:password@postgres:5432/intelligence_db
+      OLLAMA_BASE_URL: http://ollama-service:11434
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
 
+  ollama-service:
+    image: ollama/ollama:latest
+    container_name: ollama_mcp_backend
+    ports:
+      - "11434:11434"
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+    volumes:
+      - ollama_storage:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  ollama_storage:

@@ -2,7 +2,7 @@ import json
 import time
 import traceback
 import uuid
-from scraper import get_url_title
+from scraper import get_url_title, get_llm_title
 
 from typing import Any
 
@@ -92,14 +92,22 @@ def process_job(job_id: str, job_data: dict[str, Any]) -> tuple[bool, AnalysisJo
         # Call the synchronous wrapper from scraper.py
         print(f'[WORKER] Calling scraper for {url}', flush=True)
         page_title = get_url_title(url)
-        
+        llm_summary = get_llm_title(url)
+
         if page_title:
-            print(f'[WORKER] Playwright check passed for Job {job_id}', flush=True)
+            print(f'[WORKER] Playwright check passed for Job {job_id} with Page {page_title}', flush=True)
             # job_record.title = page_title
             # save_record(job_record)
         else:
             print(f'[WORKER] Playwright check failed or returned empty for Job {job_id}', flush=True)
             
+        if llm_summary:
+            print(f'[WORKER] LLM summary generated for Job {job_id} with LLM Summary {llm_summary}', flush=True)
+            # job_record.summary = llm_summary
+            # save_record(job_record)
+        else:
+            print(f'[WORKER] Failed to generate LLM summary for Job {job_id}', flush=True)
+
     except Exception as e:
         print(f'[WORKER ERROR] Failed during scraper execution: {e}', flush=True)
 
