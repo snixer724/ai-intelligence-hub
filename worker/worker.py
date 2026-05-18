@@ -1,143 +1,132 @@
 import json
+import logging
 import time
-import traceback
 import uuid
-from scraper import get_url_title, get_llm_title
-
 from typing import Any
 
 from db import AnalysisJob, save_record, session_scope
-from redis_client import redis_client
 from job_status import JobStatus
+from playwright_browser_scraper import scrape_with_browser
+from playwright_mcp_scraper import scrape_with_mcp
+from redis_client import redis_client
+
+logger = logging.getLogger(__name__)
 
 QUEUE_KEY = 'bull:analysis'
 
 
 def get_next_job() -> tuple[str, dict] | None:
+    """Pulls the next job ID from the wait queue and retrieves its data payload."""
     try:
-        wait_key = f'{QUEUE_KEY}:wait'
-        job_id = redis_client.lpop(wait_key)
-
+        job_id = redis_client.lpop(f'{QUEUE_KEY}:wait')
         if not job_id:
             return None
 
-        job_key = f'{QUEUE_KEY}:{job_id}'
-        job_raw = redis_client.hget(job_key, 'data')
-        if not job_raw:
-            return None
-
-        return job_id, json.loads(job_raw)
+        job_raw = redis_client.hget(f'{QUEUE_KEY}:{job_id}', 'data')
+        return (job_id, json.loads(job_raw)) if job_raw else None
     except Exception as e:
-        print(f'Error retrieving next job: {e}', flush=True)
+        logger.error(f"Error retrieving next job from Redis: {e}")
         return None
 
 
-def create_analysis_job(url: str) -> AnalysisJob:
-    return AnalysisJob(
-        id=str(uuid.uuid4()),
-        url=url,
-        status=JobStatus.PROCESSING.name,
-    )
+def _update_job_state(job_record: AnalysisJob, status: JobStatus) -> None:
+    """Helper to safely merge and update the DB status across transaction scopes."""
+    with session_scope() as session:
+        merged = session.merge(job_record)
+        merged.status = status.name
+        session.flush()
+        session.refresh(merged)
 
 
 def mark_job_complete(job_id: str, job_record: AnalysisJob) -> None:
+    """Finalizes successful job tracking in both Redis and the primary database."""
     try:
-        completed_key = f'{QUEUE_KEY}:completed'
-        redis_client.zadd(completed_key, {job_id: time.time()})
-
-        with session_scope() as session:
-            merged = session.merge(job_record)
-            merged.status = JobStatus.COMPLETED.name
-            session.flush()
-            session.refresh(merged)
-
-        print(f'Job {job_id} marked as complete', flush=True)
+        redis_client.zadd(f'{QUEUE_KEY}:completed', {job_id: time.time()})
+        _update_job_state(job_record, JobStatus.COMPLETED)
+        logger.info(f"Job {job_id} successfully marked as complete.")
     except Exception as e:
-        print(f'Error marking job complete: {e}', flush=True)
+        logger.error(f"Error marking job {job_id} complete: {e}")
 
 
 def mark_job_failed(job_id: str, job_record: AnalysisJob, error: str) -> None:
+    """Tracks pipeline failure processing states across cache and persistence layers."""
     try:
-        failed_key = f'{QUEUE_KEY}:failed'
-        redis_client.zadd(failed_key, {job_id: time.time()})
-        job_key = f'{QUEUE_KEY}:{job_id}'
-        redis_client.hset(job_key, mapping={'state': 'failed', 'error': error})
-
-        with session_scope() as session:
-            merged = session.merge(job_record)
-            merged.status = JobStatus.FAILED.name
-            session.flush()
-            session.refresh(merged)
-
-        print(f'Job {job_id} marked as failed: {error}', flush=True)
+        redis_client.zadd(f'{QUEUE_KEY}:failed', {job_id: time.time()})
+        redis_client.hset(f'{QUEUE_KEY}:{job_id}', mapping={'state': 'failed', 'error': error})
+        _update_job_state(job_record, JobStatus.FAILED)
+        logger.warning(f"Job {job_id} marked as failed. Reason: {error}")
     except Exception as e:
-        print(f'Error marking job as failed: {e}', flush=True)
+        logger.error(f"Error marking job {job_id} as failed: {e}")
 
 
-def process_job(job_id: str, job_data: dict[str, Any]) -> tuple[bool, AnalysisJob | None]:
-    print(f'[WORKER] Processing job {job_id}', flush=True)
+def execute_scrapers(url: str, db_job_id: str) -> bool:
+    """Executes the dual browser and MCP collection layers for the target URL."""
+    try:
+        logger.info(f"Calling scraper routines for {url}")
+        page_title = scrape_with_browser(url)
+        llm_summary = scrape_with_mcp(url)
+
+        if page_title:
+            logger.info(f"Playwright check passed for Job {db_job_id}. Title: {page_title}")
+        else:
+            logger.warning(f"Playwright check returned empty for Job {db_job_id}")
+            
+        if llm_summary:
+            logger.info(f"LLM summary successfully generated for Job {db_job_id}. Summary: {llm_summary[:1500]}...")
+        else:
+            logger.warning(f"Failed to generate LLM summary loop context for Job {db_job_id}")
+            
+        return True
+    except Exception as e:
+        logger.error(f"Critical error triggered during scraper execution for Job {db_job_id}: {e}")
+        return False
+
+
+def process_job(redis_job_id: str, job_data: dict[str, Any]) -> tuple[bool, AnalysisJob | None]:
+    """
+    Orchestrates database lifecycle setup and triggers the extraction pipeline.
+    Returns a tuple indicating overall success and the updated job record for finalization steps.
+    """
+    logger.info(f"Processing job from Redis queue: {redis_job_id}")
 
     url = job_data.get('url')
     if not url:
         raise ValueError('Job data missing required url')
 
-    print(f'[WORKER] Analyzing {url}...', flush=True)
-    job_record = create_analysis_job(url)
-    job_id = job_record.id  # Save before session closes
+    # Initialize tracking entity
+    job_id_uuid = str(uuid.uuid4())
+    job_record = AnalysisJob(id=job_id_uuid, url=url, status=JobStatus.PROCESSING.name)
     job_record = save_record(job_record)
-    print(f'[WORKER] Saved AnalysisJob {job_id} to DB', flush=True)
+    logger.info(f"Saved DB AnalysisJob record with UUID: {job_id_uuid} for URL: {url}")
 
-    # --- CALL THE EXTERNAL SCRAPER FILE ---
-    try:
-        # Call the synchronous wrapper from scraper.py
-        print(f'[WORKER] Calling scraper for {url}', flush=True)
-        page_title = get_url_title(url)
-        llm_summary = get_llm_title(url)
-
-        if page_title:
-            print(f'[WORKER] Playwright check passed for Job {job_id} with Page {page_title}', flush=True)
-            # job_record.title = page_title
-            # save_record(job_record)
-        else:
-            print(f'[WORKER] Playwright check failed or returned empty for Job {job_id}', flush=True)
-            
-        if llm_summary:
-            print(f'[WORKER] LLM summary generated for Job {job_id} with LLM Summary {llm_summary}', flush=True)
-            # job_record.summary = llm_summary
-            # save_record(job_record)
-        else:
-            print(f'[WORKER] Failed to generate LLM summary for Job {job_id}', flush=True)
-
-    except Exception as e:
-        print(f'[WORKER ERROR] Failed during scraper execution: {e}', flush=True)
-
-    print(f'[WORKER] Job {job_id} completed successfully', flush=True)
-    return True, job_record
+    success = execute_scrapers(url, job_id_uuid)
+    return success, job_record
 
 
-def main() -> None:
-    print('[WORKER] Starting worker...', flush=True)
-
+def run_worker() -> None:
+    """
+    Continuous polling loop processing incoming tasks from the message queue.
+    Designed to run indefinitely until a graceful shutdown signal is received.
+    """
+    logger.info("Worker process has verified connection state and is now listening for jobs...")
+    
     while True:
         try:
-            result = get_next_job()
-            if result is None:
+            job_payload = get_next_job()
+            if not job_payload:
                 time.sleep(1)
                 continue
 
-            job_id, job_data = result
+            job_id, job_data = job_payload
             success, job_record = process_job(job_id, job_data)
 
             if success:
                 mark_job_complete(job_id, job_record)
             else:
-                mark_job_failed(job_id, job_record, 'Job processing failed')
+                mark_job_failed(job_id, job_record, 'Job processing failed during scraping steps')
+                
         except KeyboardInterrupt:
-            print('\n[WORKER] Stopping worker...', flush=True)
+            logger.info("Graceful shutdown signal caught. Winding down worker...")
             break
-        except Exception as e:
-            print(f'[WORKER] Unexpected error:\n{traceback.format_exc()}', flush=True)
-
-
-if __name__ == '__main__':
-    main()
+        except Exception:
+            logger.exception("Queue pipeline loop encountered an unexpected runtime failure")

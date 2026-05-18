@@ -3,7 +3,7 @@ FROM mcr.microsoft.com/playwright/python:v1.59.0-noble
 # Force Python to flush logs to the terminal immediately
 ENV PYTHONUNBUFFERED=1
 
-# Install Node.js for MCP
+# Install Node.js for Playwright MCP
 RUN apt-get update && apt-get install -y curl \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
@@ -22,4 +22,4 @@ RUN playwright install --with-deps chrome
 COPY . .
 
 # Run the worker
-CMD ["python", "worker.py"]
+CMD ["python", "main.py"]
