@@ -1,6 +1,8 @@
 # ai-intelligence-hub
 AI-Powered Content Summarizer &amp; Intelligence Hub
 
+The goal of the project is for a user to submit a URL, have that URL summarized using AI (for example via LangChain), store the summary, and show the user the result and related information.
+
 Current work in progress, very new. Please see the design I put together for it though. 
 
 Project Scope (Stories)

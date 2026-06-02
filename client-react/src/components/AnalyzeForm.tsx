@@ -1,11 +1,11 @@
-import React from 'react'
+import type { SyntheticEvent } from 'react'
 import { Box, TextField, Button, Typography } from '@mui/material'
 
 type AnalyzeFormProps = {
   url: string
   setUrl: (value: string) => void
   loading: boolean
-  onSubmit: (e: React.SubmitEvent<HTMLFormElement>) => Promise<void>
+  onSubmit: (e: SyntheticEvent<HTMLFormElement>) => Promise<void>
   message: string
 }
 

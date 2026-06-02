@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, type SyntheticEvent } from 'react'
 import { Container, Typography } from '@mui/material'
 import AnalyzeForm from './components/AnalyzeForm'
 import QueueStatus from './components/QueueStatus'
@@ -8,15 +8,20 @@ function App() {
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
-  const [queueCounts, setQueueCounts] = useState<QueueCounts>({ active: 0, waiting: 0, total: 0 })
-  const [queueJobs, setQueueJobs] = useState<QueueJobs>({ active: [], waiting: [], processedCount: 0 })
+  const [queue, setQueue] = useState<{ counts: QueueCounts; jobs: QueueJobs }>({
+    counts: { active: 0, waiting: 0, failed: 0, total: 0 },
+    jobs: { active: [], waiting: [], processedCount: 0 },
+  })
 
   const fetchQueueData = async () => {
     try {
-      const res = await fetch('/api/queue/status')
-      const data = await res.json()
-      setQueueCounts(data.counts)
-      setQueueJobs(data.jobs)
+      const response = await fetch('/api/queue/status')
+      if (!response.ok) {
+        throw new Error('Failed to load queue status')
+      }
+      
+      const data = await response.json()
+      setQueue({ counts: data.counts, jobs: data.jobs })
     } catch (error) {
       console.error('Failed to fetch queue data', error)
     }
@@ -46,7 +51,7 @@ function App() {
     }
   }
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!url.trim()) return
 
@@ -85,7 +90,7 @@ function App() {
       </Typography>
 
       <AnalyzeForm url={url} setUrl={setUrl} loading={loading} onSubmit={handleSubmit} message={message}/>
-      <QueueStatus counts={queueCounts} jobs={queueJobs} onDelete={handleDelete} onReset={handleReset} />
+      <QueueStatus counts={queue.counts} jobs={queue.jobs} onDelete={handleDelete} onReset={handleReset} />
     </Container>
   )
 }
